@@ -1,0 +1,313 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { ArrowLeft, Star, Share, Heart } from "lucide-react";
+import Layout from "@/components/layout/Layout";
+import ProductImageGallery from "@/components/product/ProductImageGallery";
+import ProductInfo from "@/components/product/ProductInfo";
+import PersonalizerCanvas from "@/components/personalizer/PersonalizerCanvas";
+import PersonalizerControls from "@/components/personalizer/PersonalizerControls";
+import ProductTabs from "@/components/product/ProductTabs";
+import { Button } from "@/components/ui/button-enhanced";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Product, ProductVariant } from "@/types";
+import { mockApi } from "@/utils/mockApi";
+import { useCart } from "@/contexts/AppContext";
+import { toast } from "sonner";
+
+const ProductDetail = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { addToCart } = useCart();
+  
+  const [product, setProduct] = useState<Product | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [quantity, setQuantity] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showPersonalizer, setShowPersonalizer] = useState(false);
+
+  useEffect(() => {
+    const loadProduct = async () => {
+      if (!id) return;
+      
+      try {
+        setLoading(true);
+        const productData = await mockApi.getProduct(id);
+        
+        if (productData) {
+          setProduct(productData);
+          setSelectedVariant(productData.variants[0]);
+        } else {
+          toast.error('Product not found');
+          navigate('/');
+        }
+      } catch (error) {
+        toast.error('Failed to load product');
+        console.error('Error loading product:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProduct();
+  }, [id, navigate]);
+
+  const handleAddToCart = async () => {
+    if (!product || !selectedVariant) return;
+
+    try {
+      setIsSaving(true);
+      
+      // TODO: Get design from PersonalizerCanvas component
+      const designData = null; // This will come from the personalizer
+      
+      addToCart({
+        productId: product.id,
+        variantId: selectedVariant.id,
+        quantity,
+        price: selectedVariant.price,
+        design: designData || undefined,
+        personalizationSummary: designData ? 'Custom Design' : 'No customization',
+      });
+      
+    } catch (error) {
+      toast.error('Failed to add to cart');
+      console.error('Error adding to cart:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBuyNow = () => {
+    handleAddToCart();
+    setTimeout(() => {
+      navigate('/cart');
+    }, 500);
+  };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-8">
+          <Skeleton className="h-8 w-32 mb-6" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+            <div className="space-y-4">
+              <Skeleton className="aspect-square w-full rounded-xl" />
+              <div className="grid grid-cols-4 gap-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="aspect-square rounded-lg" />
+                ))}
+              </div>
+            </div>
+            <div className="space-y-6">
+              <Skeleton className="h-8 w-3/4" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!product) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-16 text-center">
+          <h1 className="text-2xl font-heading font-bold mb-4">Product Not Found</h1>
+          <p className="text-muted-foreground mb-8">The product you're looking for doesn't exist.</p>
+          <Button onClick={() => navigate('/')} variant="brand">
+            Return to Home
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
+  const canPersonalize = product.personalization && 
+    (product.personalization.supportsImage || product.personalization.supportsText);
+
+  return (
+    <Layout>
+      <div className="container mx-auto px-4 py-6">
+        {/* Back Button */}
+        <Button
+          variant="ghost"
+          onClick={() => navigate(-1)}
+          className="mb-6 -ml-2"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8 mb-12">
+          {/* Product Images */}
+          <div className="lg:col-span-1">
+            <ProductImageGallery 
+              images={product.images}
+              title={product.title}
+            />
+          </div>
+
+          {/* Personalizer Canvas (when active) */}
+          {showPersonalizer && canPersonalize && (
+            <div className="lg:col-span-1 xl:col-span-1">
+              <PersonalizerCanvas
+                product={product}
+                variant={selectedVariant!}
+              />
+            </div>
+          )}
+
+          {/* Product Info & Controls */}
+          <div className="lg:col-span-1 xl:col-span-1 space-y-6">
+            {/* Product Header */}
+            <div>
+              <div className="flex items-start justify-between mb-2">
+                <h1 className="text-2xl lg:text-3xl font-heading font-bold text-foreground">
+                  {product.title}
+                </h1>
+                <div className="flex items-center space-x-2">
+                  <Button variant="ghost" size="icon">
+                    <Share className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon">
+                    <Heart className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="flex items-center">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star 
+                      key={i} 
+                      className="h-4 w-4 fill-yellow-400 text-yellow-400" 
+                    />
+                  ))}
+                  <span className="ml-2 text-sm text-muted-foreground">(127 reviews)</span>
+                </div>
+                <Badge variant={product.stock === 'in-stock' ? 'default' : 'secondary'}>
+                  {product.stock === 'in-stock' ? 'In Stock' : 'Out of Stock'}
+                </Badge>
+              </div>
+
+              <p className="text-muted-foreground mb-6">
+                {product.description}
+              </p>
+            </div>
+
+            {/* Product Configuration */}
+            <ProductInfo
+              product={product}
+              selectedVariant={selectedVariant}
+              onVariantChange={setSelectedVariant}
+              quantity={quantity}
+              onQuantityChange={setQuantity}
+            />
+
+            {/* Personalization Toggle */}
+            {canPersonalize && (
+              <div className="border rounded-lg p-4 bg-gradient-hero">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold">Personalization</h3>
+                  <Badge variant="secondary">
+                    {product.personalization!.supportsImage && product.personalization!.supportsText 
+                      ? 'Photo & Text' 
+                      : product.personalization!.supportsImage 
+                        ? 'Photo Only' 
+                        : 'Text Only'
+                    }
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {showPersonalizer 
+                    ? 'Customize your design using the canvas on the left'
+                    : 'Add your photos and text to create a unique design'
+                  }
+                </p>
+                <Button
+                  variant={showPersonalizer ? "secondary" : "brand-outline"}
+                  onClick={() => setShowPersonalizer(!showPersonalizer)}
+                  className="w-full"
+                >
+                  {showPersonalizer ? 'Hide Personalizer' : 'Start Customizing'}
+                </Button>
+              </div>
+            )}
+
+            {/* Personalizer Controls (when active) */}
+            {showPersonalizer && canPersonalize && (
+              <PersonalizerControls
+                product={product}
+                variant={selectedVariant!}
+              />
+            )}
+
+            {/* Add to Cart Section */}
+            <div className="space-y-3 pt-6 border-t">
+              <div className="text-3xl font-heading font-bold">
+                ₹{selectedVariant?.price.toLocaleString('en-IN')}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  variant="brand-outline"
+                  size="lg"
+                  onClick={handleAddToCart}
+                  disabled={isSaving || product.stock !== 'in-stock'}
+                  className="flex-1"
+                >
+                  {isSaving ? 'Adding...' : 'Add to Cart'}
+                </Button>
+                
+                <Button
+                  variant="brand"
+                  size="lg"
+                  onClick={handleBuyNow}
+                  disabled={isSaving || product.stock !== 'in-stock'}
+                  className="flex-1"
+                >
+                  Buy Now
+                </Button>
+              </div>
+              
+              <div className="text-xs text-muted-foreground text-center">
+                Free shipping on orders above ₹499 • 7-day returns
+              </div>
+            </div>
+
+            {/* Product Details */}
+            <div className="space-y-4 pt-6 border-t">
+              <div>
+                <h4 className="font-semibold mb-2">Materials</h4>
+                <div className="flex flex-wrap gap-2">
+                  {product.materials.map((material) => (
+                    <Badge key={material} variant="outline">
+                      {material}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              
+              {selectedVariant && (
+                <div>
+                  <h4 className="font-semibold mb-2">Dimensions</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedVariant.dimensions}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Product Details Tabs */}
+        <ProductTabs product={product} />
+      </div>
+    </Layout>
+  );
+};
+
+export default ProductDetail;
