@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, Share, Heart } from "lucide-react";
+import { ArrowLeft, Star, Share, Heart, Image, Upload } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import ProductImageGallery from "@/components/product/ProductImageGallery";
 import ProductInfo from "@/components/product/ProductInfo";
@@ -10,16 +10,24 @@ import ProductTabs from "@/components/product/ProductTabs";
 import { Button } from "@/components/ui/button-enhanced";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Product, ProductVariant } from "@/types";
+import { Design, Product, ProductVariant } from "@/types";
 import { mockApi } from "@/utils/mockApi";
 import { useCart } from "@/contexts/AppContext";
 import { toast } from "sonner";
+import { useFileUpload } from "@/hooks/useFileUpload";
+import FileUploader from "@/components/FileUploader";
+
 
 const ProductDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { addToCart } = useCart();
   
+  // Photo editor state
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [design, setDesign] = useState<Design | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,6 +84,41 @@ const ProductDetail = () => {
       console.error('Error adding to cart:', error);
     } finally {
       setIsSaving(false);
+    }
+  };
+// kk
+
+const handleOpenEditor = () => {
+    if (!uploadedFile) {
+      toast.error('Please upload a photo first');
+      return;
+    }
+    setEditorOpen(true);
+  };
+
+// kk
+const { 
+    uploadedFile, 
+    handleFile, 
+    removeFile, 
+    validateFile,
+    estimatePrintResolution,
+    error: uploadError 
+  } = useFileUpload(10);
+
+  const handleFileUpload = async (file: File, url: string) => {
+    if (!validateFile(file)) return;
+    
+    handleFile(file, url);
+    
+    // Estimate print quality
+    try {
+      const resolution = await estimatePrintResolution(file);
+      if (resolution.quality === 'low' && selectedVariant) {
+        toast.warning(`Image resolution is ${resolution.dpi} DPI. For best print quality at ${selectedVariant.name}, consider using a higher resolution image.`);
+      }
+    } catch (error) {
+      console.error('Error estimating resolution:', error);
     }
   };
 
@@ -198,6 +241,76 @@ const ProductDetail = () => {
               </p>
             </div>
 
+            {/* kk */}
+            {/* Personalization Toggle */}
+            {canPersonalize && (
+              <div className="border rounded-2xl p-6 bg-gradient-to-br from-background to-muted/20">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-lg">Upload & Customize</h3>
+                  <Badge variant="secondary" className="bg-printStrokes-secondary/10 text-printStrokes-secondary">
+                    Photo Editor
+                  </Badge>
+                </div>
+                
+                {!uploadedFile ? (
+                  <FileUploader
+                    onFile={handleFileUpload}
+                    accept={{ 'image/*': ['.jpeg', '.jpg', '.png', '.webp'] }}
+                    maxSizeMB={10}
+                    className="mb-4"
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    <div className="relative group">
+                      <div className="aspect-video w-full max-w-xs mx-auto rounded-xl overflow-hidden bg-muted border">
+                        <img
+                          src={previewUrl || uploadedFile.url}
+                          alt="Uploaded preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleOpenEditor}
+                        className="flex-1 bg-printStrokes-primary hover:bg-printStrokes-primary/90"
+                        variant="default"
+                      >
+                        <Image className="h-4 w-4 mr-2" />
+                        {design ? 'Edit Design' : 'Start Editing'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={removeFile}
+                        className="px-4"
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        Replace
+                      </Button>
+                    </div>
+                    
+                    {design && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                        <Badge variant="outline" className="text-xs">
+                          ✨ Custom Design
+                        </Badge>
+                        <span>Design saved • Ready to order</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {uploadError && (
+                  <div className="mt-3 text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
+                    {uploadError}
+                  </div>
+                )}
+              </div>
+            )}
+
+            
+
             {/* Product Configuration */}
             <ProductInfo
               product={product}
@@ -206,9 +319,10 @@ const ProductDetail = () => {
               quantity={quantity}
               onQuantityChange={setQuantity}
             />
+          
+            
 
-            {/* Personalization Toggle */}
-            {canPersonalize && (
+            {/* {canPersonalize && (
               <div className="border rounded-lg p-4 bg-gradient-hero">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold">Personalization</h3>
@@ -235,7 +349,7 @@ const ProductDetail = () => {
                   {showPersonalizer ? 'Hide Personalizer' : 'Start Customizing'}
                 </Button>
               </div>
-            )}
+            )} */}
 
             {/* Personalizer Controls (when active) */}
             {showPersonalizer && canPersonalize && (

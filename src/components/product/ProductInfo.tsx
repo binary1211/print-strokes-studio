@@ -108,9 +108,9 @@ const ProductInfo = ({
           </div>
         </div>
       </div>
-
+      {/* kk */}
       {/* Personalization Options */}
-      {product.personalizationOptions.length > 0 && (
+      {/* {product.personalizationOptions.length > 0 && (
         <div>
           <h3 className="font-semibold mb-3">Personalization Available</h3>
           <div className="flex flex-wrap gap-2">
@@ -124,7 +124,7 @@ const ProductInfo = ({
             Use the personalizer to add your custom designs
           </p>
         </div>
-      )}
+      )} */}
 
       {/* Product Tags */}
       <div>

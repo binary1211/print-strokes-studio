@@ -29,7 +29,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
             alt={product.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
-          />
+          />  
           
           {/* Featured Badge */}
           {product.featured && (

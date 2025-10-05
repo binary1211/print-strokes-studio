@@ -19,6 +19,17 @@ export interface Product {
   };
 }
 
+export interface Design {
+  id: string;
+  productId: string;
+  variantId: string;
+  layers: (ImageLayer | TextLayer)[];
+  canvasWidth: number;
+  canvasHeight: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProductVariant {
   id: string;
   name: string;
