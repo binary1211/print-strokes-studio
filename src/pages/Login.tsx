@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
-const API_BASE = "http://localhost:8080/api/v1/auth";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api/v1/auth` : "http://localhost:8080/api/v1/auth";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -46,11 +46,10 @@ const Login = () => {
         return;
       }
 
-      // Save tokens to localStorage
-      localStorage.setItem("accessToken", data.data.accessToken);
-      localStorage.setItem("refreshToken", data.data.refreshToken);
+      const accessToken = data?.data?.accessToken;
+      if (accessToken) localStorage.setItem("accessToken", accessToken);
 
-      toast.success("Login successful 🎉");
+      toast.success(data.message || "Login successful 🎉");
       navigate(from, { replace: true });
     } catch (error) {
       console.error("Login error:", error);
@@ -84,14 +83,16 @@ const Login = () => {
 
       const data = await res.json();
 
-      if (!res.ok) {
+      if (!res.ok || !data.success) {
         toast.error(data.message || "Signup failed");
         return;
       }
 
       toast.success(data.message || "Account created successfully!");
+      // Ideally log them in right away, but for now we just navigate
       navigate(from, { replace: true });
     } catch (error) {
+      console.error("Register error:", error);
       toast.error("Something went wrong!");
     } finally {
       setIsLoading(false);

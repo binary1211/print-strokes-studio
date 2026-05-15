@@ -10,6 +10,8 @@ import Cart from "./pages/Cart";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
+import AcrylicCutouts from "./pages/AcrylicCutouts";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -21,6 +23,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/product/acrylic-cutouts" element={<AcrylicCutouts />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/login" element={<Login />} />

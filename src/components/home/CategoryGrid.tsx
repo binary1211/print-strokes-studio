@@ -1,116 +1,65 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import { Frame, Coffee, Gift, Smartphone, Clock, Award } from "lucide-react";
 
-// Mapping from API category names to local icons and colors
-const categoryMap = {
-  "WALL DECORATIVES": {
+const staticCategories = [
+  {
+    id: "1",
+    name: "Wall Decoratives",
+    description: "Premium wall art and canvas prints",
+    href: "/category/1",
     icon: Frame,
     color: "from-primary/20 to-primary/5",
+    count: "120+ Items",
   },
-  "DESK DECORATIVES": {
+  {
+    id: "2",
+    name: "Desk Decoratives",
+    description: "Personalized mugs, frames and more",
+    href: "/category/2",
     icon: Coffee,
     color: "from-secondary/20 to-secondary/5",
+    count: "85+ Items",
   },
-  "PHOTO BOOKS": {
+  {
+    id: "3",
+    name: "Photo Books",
+    description: "Custom photo albums and memory books",
+    href: "/category/3",
     icon: Gift,
     color: "from-green-500/20 to-green-500/5",
+    count: "45+ Items",
   },
-  "HOME DECORATIVES": {
+  {
+    id: "4",
+    name: "Home Decoratives",
+    description: "Personalized home accessories",
+    href: "/category/4",
     icon: Award,
     color: "from-yellow-500/20 to-yellow-500/5",
+    count: "150+ Items",
   },
-  "CAR DECORATIVES": {
+  {
+    id: "5",
+    name: "Car Decoratives",
+    description: "Custom car hanging and accessories",
+    href: "/category/5",
     icon: Clock,
     color: "from-blue-500/20 to-blue-500/5",
+    count: "30+ Items",
   },
-  "FASHION & ACCESSORIES": {
+  {
+    id: "6",
+    name: "Mobile Accessories",
+    description: "Custom phone cases and covers",
+    href: "/category/6",
     icon: Smartphone,
     color: "from-purple-500/20 to-purple-500/5",
+    count: "200+ Items",
   },
-  "MOBILE ACCESSORIES": {
-    icon: Smartphone,
-    color: "from-purple-500/20 to-purple-500/5",
-  },
-  "OFFICE STATIONERY": {
-    icon: Coffee,
-    color: "from-secondary/20 to-secondary/5",
-  }
-};
+];
 
 const CategoryGrid = () => {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const accessToken = localStorage.getItem("accessToken");
-        if (!accessToken) {
-          setError("Access token not found. Please log in.");
-          setLoading(false);
-          return;
-        }
-
-        const response = await fetch("http://localhost:8080/api/v1/category", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        // The API response returns "name" as a string with all caps.
-        // The code now uses the `categoryMap` to dynamically assign the correct icon and color.
-        const formattedCategories = data.data.map((category) => {
-          const mappedInfo = categoryMap[category.name] || {
-            icon: Award,
-            color: "from-gray-500/20 to-gray-500/5",
-          }; // Default if not found
-          return {
-            ...category,
-            name: category.name.charAt(0).toUpperCase() + category.name.slice(1).toLowerCase(),
-            description: category.description,
-            href: `/category/${category.id}`, // Using id for routing
-            icon: mappedInfo.icon,
-            color: mappedInfo.color,
-            count: "N/A", // This is not available in the API response, so it's a placeholder
-          };
-        });
-
-        setCategories(formattedCategories);
-      } catch (e) {
-        setError("Failed to fetch categories: " + e.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCategories();
-  }, []);
-
-  if (loading) {
-    return (
-      <section className="py-16 bg-muted/30 text-center">
-        <p>Loading categories...</p>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section className="py-16 bg-muted/30 text-center text-red-500">
-        <p>{error}</p>
-      </section>
-    );
-  }
-
   return (
     <section className="py-16 bg-muted/30">
       <div className="container mx-auto px-4">
@@ -124,12 +73,12 @@ const CategoryGrid = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {categories.map((category) => {
+          {staticCategories.map((category) => {
             const IconComponent = category.icon;
 
             return (
               <Link
-                key={category.id} // Use unique ID from API
+                key={category.id} // Use unique ID
                 to={category.href}
                 className="group card-elegant hover:shadow-brand transition-all duration-300"
               >
