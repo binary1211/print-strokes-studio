@@ -28,12 +28,12 @@ const ProductImageGallery = ({ images, title }: ProductImageGalleryProps) => {
           src={images[selectedImage]}
           alt={`${title} - Image ${selectedImage + 1}`}
           className={cn(
-            "w-full h-full object-cover transition-transform duration-300",
+            "w-full h-full object-contain transition-transform duration-300",
             isZoomed && "scale-125"
           )}
           loading="lazy"
         />
-        
+
         {/* Navigation Controls */}
         {images.length > 1 && (
           <>

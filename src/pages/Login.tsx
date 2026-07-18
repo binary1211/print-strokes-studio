@@ -8,13 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api/v1/auth` : "http://localhost:8080/api/v1/auth";
+import { useAuth } from "@/contexts/AppContext";
 
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as any)?.from?.pathname || "/";
+  const { login, register } = useAuth();
+  const requestedPath = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+  const from = requestedPath?.startsWith("/") && !requestedPath.startsWith("//") ? requestedPath : "/";
 
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -27,73 +28,40 @@ const Login = () => {
     confirmPassword: "",
   });
 
-  // 🔹 Handle Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
     try {
-      const res = await fetch(`${API_BASE}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(loginForm),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        toast.error(data.message || "Login failed");
-        return;
-      }
-
-      const accessToken = data?.data?.accessToken;
-      if (accessToken) localStorage.setItem("accessToken", accessToken);
-
-      toast.success(data.message || "Login successful 🎉");
+      await login(loginForm.email.trim(), loginForm.password);
       navigate(from, { replace: true });
     } catch (error) {
-      console.error("Login error:", error);
-      toast.error("Something went wrong!");
+      toast.error(error instanceof Error ? error.message : "Login failed");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 🔹 Handle Register
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    if (registerForm.password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
     if (registerForm.password !== registerForm.confirmPassword) {
       toast.error("Passwords don't match");
       return;
     }
 
     setIsLoading(true);
-
     try {
-      const res = await fetch(`${API_BASE}/signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: registerForm.name,
-          email: registerForm.email,
-          password: registerForm.password,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        toast.error(data.message || "Signup failed");
-        return;
-      }
-
-      toast.success(data.message || "Account created successfully!");
-      // Ideally log them in right away, but for now we just navigate
+      await register(
+        registerForm.name.trim(),
+        registerForm.email.trim(),
+        registerForm.password,
+      );
       navigate(from, { replace: true });
     } catch (error) {
-      console.error("Register error:", error);
-      toast.error("Something went wrong!");
+      toast.error(error instanceof Error ? error.message : "Signup failed");
     } finally {
       setIsLoading(false);
     }
@@ -103,7 +71,12 @@ const Login = () => {
     <Layout>
       <div className="container mx-auto px-4 py-16">
         <div className="max-w-md mx-auto">
-          <div className="text-center mb-8">
+          <div className="text-center mb-8 flex flex-col items-center">
+            <img
+              src="/print%20strokes%20logo.png"
+              alt="Print Strokes"
+              className="h-16 w-auto object-contain mb-4 animate-float"
+            />
             <h1 className="text-3xl font-heading font-bold text-gradient-brand mb-2">
               Welcome to Print Strokes
             </h1>
@@ -184,12 +157,9 @@ const Login = () => {
                   </Button>
 
                   <div className="text-center">
-                    <Link
-                      to="/forgot-password"
-                      className="text-sm text-primary hover:underline"
-                    >
-                      Forgot your password?
-                    </Link>
+                    <span className="text-sm text-muted-foreground">
+                      Password reset is not enabled yet.
+                    </span>
                   </div>
                 </form>
               </TabsContent>

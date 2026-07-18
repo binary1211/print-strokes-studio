@@ -14,33 +14,28 @@ const HeroSection = () => {
               <Sparkles className="h-4 w-4" />
               Create Something Unique
             </div>
-            
+
             <h1 className="text-4xl lg:text-6xl font-heading font-bold leading-tight">
               Transform Your
               <span className="text-gradient-brand block">
                 Memories Into Art
               </span>
             </h1>
-            
+
             <p className="text-lg lg:text-xl text-muted-foreground max-w-2xl">
-              Personalize premium products with your photos and text. From acrylic frames 
+              Personalize premium products with your photos and text. From acrylic frames
               to custom mobile cases, create something special that tells your story.
             </p>
-            
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <Button variant="hero" size="xl" asChild>
-                <Link to="/personalize">
-                  Create Your Design
+                <Link to="/category/all">
+                  Browse Products
                   <ArrowRight className="h-5 w-5" />
                 </Link>
               </Button>
-              <Button variant="hero-outline" size="xl" asChild>
-                <Link to="/category/all">
-                  Browse Products
-                </Link>
-              </Button>
             </div>
-            
+
             <div className="flex items-center justify-center lg:justify-start gap-8 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -56,7 +51,7 @@ const HeroSection = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Right Image */}
           <div className="relative">
             <div className="relative z-10 animate-float">
@@ -67,8 +62,8 @@ const HeroSection = () => {
                 loading="eager"
               />
             </div>
-            
-            {/* Decorative Elements */} 
+
+            {/* Decorative Elements */}
             <div className="absolute -top-4 -right-4 w-20 h-20 bg-primary/20 rounded-full blur-xl animate-pulse-slow"></div>
             <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-secondary/20 rounded-full blur-xl animate-pulse-slow delay-1000"></div>
           </div>

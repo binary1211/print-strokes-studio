@@ -21,7 +21,7 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         // Print Strokes brand variants
         brand: "btn-brand rounded-lg font-semibold",
-        "brand-secondary": "btn-secondary rounded-lg font-semibold", 
+        "brand-secondary": "btn-secondary rounded-lg font-semibold",
         "brand-outline": "btn-outline-brand rounded-lg font-semibold",
         hero: "bg-primary text-primary-foreground shadow-brand hover:bg-primary/90 hover:scale-[1.02] font-semibold text-base px-8 py-3 rounded-xl",
         "hero-outline": "border-2 border-primary text-primary bg-transparent hover:bg-primary hover:text-primary-foreground hover:scale-[1.02] font-semibold text-base px-8 py-3 rounded-xl"
@@ -32,6 +32,7 @@ const buttonVariants = cva(
         lg: "h-10 rounded-md px-8",
         xl: "h-12 rounded-lg px-10 text-base",
         icon: "h-9 w-9",
+        "icon-xs": "h-7 w-7",
       },
     },
     defaultVariants: {

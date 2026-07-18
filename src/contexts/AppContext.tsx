@@ -1,26 +1,29 @@
-import { createContext, useContext, useReducer, ReactNode, useEffect } from "react";
-import { CartItem, CartState, AuthState, User, PersonalizationState, Design } from "@/types";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, type ReactNode } from "react";
+import type { AuthState, CartItem, CartState, Design, PersonalizationState, User } from "@/types";
 import { toast } from "sonner";
+import { storefrontApi } from "@/lib/api/storefrontApi";
+import { customerTokenStorage } from "@/lib/auth/tokenStorage";
+import { getApiErrorMessage } from "@/lib/api/apiClient";
 
-// Cart Context
+const GUEST_CART_KEY = "printstrokes_guest_cart";
+
 interface CartContextType {
   state: CartState;
-  addToCart: (item: Omit<CartItem, 'id'>) => void;
-  removeFromCart: (itemId: string) => void;
-  updateQuantity: (itemId: string, quantity: number) => void;
-  clearCart: () => void;
-  updateCartItemDesign: (itemId: string, design: Design) => void;
+  addToCart: (item: Omit<CartItem, "id">) => Promise<void>;
+  removeFromCart: (itemId: string) => Promise<void>;
+  updateQuantity: (itemId: string, quantity: number) => Promise<void>;
+  clearCart: () => Promise<void>;
+  updateCartItemDesign: (itemId: string, design: Design) => Promise<void>;
+  refreshCart: () => Promise<void>;
 }
 
-// Auth Context
 interface AuthContextType {
   state: AuthState;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  register: (name: string, email: string, password: string, phone?: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
-// Personalization Context
 interface PersonalizationContextType {
   state: PersonalizationState;
   setCurrentDesign: (design: Design | null) => void;
@@ -32,161 +35,118 @@ interface PersonalizationContextType {
   loadDesign: (designId: string) => Promise<Design | null>;
 }
 
-// Reducers
-const cartReducer = (state: CartState, action: any): CartState => {
+type CartAction =
+  | { type: "SET_CART"; payload: Omit<CartState, "isLoading"> }
+  | { type: "SET_LOADING"; payload: boolean }
+  | { type: "ADD_GUEST_ITEM"; payload: Omit<CartItem, "id"> }
+  | { type: "REMOVE_GUEST_ITEM"; payload: string }
+  | { type: "UPDATE_GUEST_QUANTITY"; payload: { itemId: string; quantity: number } }
+  | { type: "UPDATE_GUEST_DESIGN"; payload: { itemId: string; design: Design } }
+  | { type: "CLEAR" };
+
+type AuthAction =
+  | { type: "LOADING"; payload: boolean }
+  | { type: "AUTHENTICATED"; payload: User }
+  | { type: "LOGOUT" };
+
+type PersonalizationAction =
+  | { type: "SET_CURRENT_DESIGN"; payload: Design | null }
+  | { type: "SET_CANVAS_READY"; payload: boolean }
+  | { type: "SET_SELECTED_LAYER"; payload: string | null }
+  | { type: "SET_CANVAS_ZOOM"; payload: number }
+  | { type: "SET_CANVAS_OFFSET"; payload: { x: number; y: number } };
+
+const summarize = (items: CartItem[]): Omit<CartState, "isLoading"> => ({
+  items,
+  itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+  total: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+});
+
+const cartReducer = (state: CartState, action: CartAction): CartState => {
   switch (action.type) {
-    case 'ADD_TO_CART':
-      const newItem: CartItem = {
-        ...action.payload,
-        id: Date.now().toString(),
-      };
-      const newItems = [...state.items, newItem];
+    case "SET_CART":
+      return { ...action.payload, isLoading: false };
+    case "SET_LOADING":
+      return { ...state, isLoading: action.payload };
+    case "ADD_GUEST_ITEM": {
+      const item: CartItem = { ...action.payload, id: crypto.randomUUID() };
+      return { ...summarize([...state.items, item]), isLoading: false };
+    }
+    case "REMOVE_GUEST_ITEM":
+      return { ...summarize(state.items.filter((item) => item.id !== action.payload)), isLoading: false };
+    case "UPDATE_GUEST_QUANTITY":
       return {
-        ...state,
-        items: newItems,
-        itemCount: newItems.reduce((sum, item) => sum + item.quantity, 0),
-        total: newItems.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-      };
-    
-    case 'REMOVE_FROM_CART':
-      const filteredItems = state.items.filter(item => item.id !== action.payload);
-      return {
-        ...state,
-        items: filteredItems,
-        itemCount: filteredItems.reduce((sum, item) => sum + item.quantity, 0),
-        total: filteredItems.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-      };
-    
-    case 'UPDATE_QUANTITY':
-      const updatedItems = state.items.map(item =>
-        item.id === action.payload.itemId
+        ...summarize(state.items.map((item) => item.id === action.payload.itemId
           ? { ...item, quantity: action.payload.quantity }
-          : item
-      );
-      return {
-        ...state,
-        items: updatedItems,
-        itemCount: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
-        total: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+          : item)),
+        isLoading: false,
       };
-    
-    case 'UPDATE_ITEM_DESIGN':
-      const itemsWithUpdatedDesign = state.items.map(item =>
-        item.id === action.payload.itemId
-          ? { 
-              ...item, 
-              design: action.payload.design,
-              personalizationSummary: generatePersonalizationSummary(action.payload.design)
-            }
-          : item
-      );
+    case "UPDATE_GUEST_DESIGN":
       return {
-        ...state,
-        items: itemsWithUpdatedDesign,
+        ...summarize(state.items.map((item) => item.id === action.payload.itemId
+          ? { ...item, design: action.payload.design, customizationJson: JSON.stringify(action.payload.design) }
+          : item)),
+        isLoading: false,
       };
-    
-    case 'CLEAR_CART':
-      return {
-        items: [],
-        total: 0,
-        itemCount: 0,
-      };
-    
+    case "CLEAR":
+      return { items: [], total: 0, itemCount: 0, isLoading: false };
     default:
       return state;
   }
 };
 
-const authReducer = (state: AuthState, action: any): AuthState => {
+const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
-    case 'LOGIN_START':
-      return { ...state, isLoading: true };
-    
-    case 'LOGIN_SUCCESS':
-      return {
-        ...state,
-        user: action.payload,
-        isAuthenticated: true,
-        isLoading: false,
-      };
-    
-    case 'LOGIN_ERROR':
-      return {
-        ...state,
-        isLoading: false,
-      };
-    
-    case 'LOGOUT':
-      return {
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-      };
-    
-    default:
-      return state;
+    case "LOADING": return { ...state, isLoading: action.payload };
+    case "AUTHENTICATED": return { user: action.payload, isAuthenticated: true, isLoading: false };
+    case "LOGOUT": return { user: null, isAuthenticated: false, isLoading: false };
+    default: return state;
   }
 };
 
-const personalizationReducer = (state: PersonalizationState, action: any): PersonalizationState => {
+const personalizationReducer = (state: PersonalizationState, action: PersonalizationAction): PersonalizationState => {
   switch (action.type) {
-    case 'SET_CURRENT_DESIGN':
-      return { ...state, currentDesign: action.payload };
-    
-    case 'SET_CANVAS_READY':
-      return { ...state, isCanvasReady: action.payload };
-    
-    case 'SET_SELECTED_LAYER':
-      return { ...state, selectedLayerId: action.payload };
-    
-    case 'SET_CANVAS_ZOOM':
-      return { ...state, canvasZoom: action.payload };
-    
-    case 'SET_CANVAS_OFFSET':
-      return { 
-        ...state, 
-        canvasOffsetX: action.payload.x, 
-        canvasOffsetY: action.payload.y 
-      };
-    
-    default:
-      return state;
+    case "SET_CURRENT_DESIGN": return { ...state, currentDesign: action.payload };
+    case "SET_CANVAS_READY": return { ...state, isCanvasReady: action.payload };
+    case "SET_SELECTED_LAYER": return { ...state, selectedLayerId: action.payload };
+    case "SET_CANVAS_ZOOM": return { ...state, canvasZoom: action.payload };
+    case "SET_CANVAS_OFFSET": return { ...state, canvasOffsetX: action.payload.x, canvasOffsetY: action.payload.y };
+    default: return state;
   }
 };
 
-// Helper functions
-const generatePersonalizationSummary = (design: Design | undefined): string => {
-  if (!design) return 'No customization';
-  
-  const imageLayers = design.layers.filter(l => l.type === 'image').length;
-  const textLayers = design.layers.filter(l => l.type === 'text').length;
-  
-  const parts = [];
-  if (imageLayers > 0) parts.push(`${imageLayers} Image${imageLayers > 1 ? 's' : ''}`);
-  if (textLayers > 0) parts.push(`${textLayers} Text Layer${textLayers > 1 ? 's' : ''}`);
-  
-  return parts.length > 0 ? parts.join(', ') : 'Custom Design';
+const readGuestCart = (): Omit<CartState, "isLoading"> => {
+  try {
+    const raw = localStorage.getItem(GUEST_CART_KEY);
+    if (!raw) return { items: [], total: 0, itemCount: 0 };
+    const parsed = JSON.parse(raw) as Partial<CartState>;
+    return summarize(Array.isArray(parsed.items) ? parsed.items : []);
+  } catch {
+    localStorage.removeItem(GUEST_CART_KEY);
+    return { items: [], total: 0, itemCount: 0 };
+  }
 };
 
-// Contexts
+const safeReadDesigns = (): Design[] => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("printstrokes_designs") || "[]") as unknown;
+    return Array.isArray(parsed) ? parsed as Design[] : [];
+  } catch {
+    return [];
+  }
+};
+
 const CartContext = createContext<CartContextType | null>(null);
 const AuthContext = createContext<AuthContextType | null>(null);
 const PersonalizationContext = createContext<PersonalizationContextType | null>(null);
 
-// Provider
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [cartState, cartDispatch] = useReducer(cartReducer, {
-    items: [],
-    total: 0,
-    itemCount: 0,
-  });
-
+  const [cartState, cartDispatch] = useReducer(cartReducer, undefined, () => ({ ...readGuestCart(), isLoading: false }));
   const [authState, authDispatch] = useReducer(authReducer, {
-    user: null,
-    isAuthenticated: false,
-    isLoading: false,
+    user: customerTokenStorage.getUser(),
+    isAuthenticated: Boolean(customerTokenStorage.getUser()),
+    isLoading: true,
   });
-
   const [personalizationState, personalizationDispatch] = useReducer(personalizationReducer, {
     currentDesign: null,
     isCanvasReady: false,
@@ -196,183 +156,169 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     canvasOffsetY: 0,
   });
 
-  // Load cart from localStorage on mount
-  useEffect(() => {
-    const savedCart = localStorage.getItem('printstrokes_cart');
-    if (savedCart) {
-      const cart = JSON.parse(savedCart);
-      cart.items.forEach((item: CartItem) => {
-        cartDispatch({ type: 'ADD_TO_CART', payload: item });
-      });
+  const refreshCart = useCallback(async () => {
+    if (!customerTokenStorage.getRefreshToken() && !customerTokenStorage.getAccessToken()) return;
+    cartDispatch({ type: "SET_LOADING", payload: true });
+    try {
+      const cart = await storefrontApi.cart.get();
+      cartDispatch({ type: "SET_CART", payload: cart });
+    } catch (error) {
+      cartDispatch({ type: "SET_LOADING", payload: false });
+      throw error;
     }
   }, []);
 
-  // Save cart to localStorage whenever it changes
+  const syncGuestCart = useCallback(async () => {
+    const guestItems = readGuestCart().items;
+    for (const item of guestItems) await storefrontApi.cart.add(item);
+    localStorage.removeItem(GUEST_CART_KEY);
+    await refreshCart();
+  }, [refreshCart]);
+
   useEffect(() => {
-    localStorage.setItem('printstrokes_cart', JSON.stringify(cartState));
-  }, [cartState]);
-
-  // Cart actions
-  const addToCart = (item: Omit<CartItem, 'id'>) => {
-    cartDispatch({ type: 'ADD_TO_CART', payload: item });
-    toast.success('Added to cart!', {
-      action: {
-        label: 'View Cart',
-        onClick: () => window.location.href = '/cart',
-      },
-    });
-  };
-
-  const removeFromCart = (itemId: string) => {
-    cartDispatch({ type: 'REMOVE_FROM_CART', payload: itemId });
-    toast.success('Removed from cart');
-  };
-
-  const updateQuantity = (itemId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(itemId);
-      return;
-    }
-    cartDispatch({ type: 'UPDATE_QUANTITY', payload: { itemId, quantity } });
-  };
-
-  const clearCart = () => {
-    cartDispatch({ type: 'CLEAR_CART' });
-  };
-
-  const updateCartItemDesign = (itemId: string, design: Design) => {
-    cartDispatch({ type: 'UPDATE_ITEM_DESIGN', payload: { itemId, design } });
-  };
-
-  // Auth actions (mock implementations)
-  const login = async (email: string, password: string) => {
-    authDispatch({ type: 'LOGIN_START' });
-    
-    // Mock API call
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (email === 'demo@printstrokes.com' && password === 'demo123') {
-        const user: User = {
-          id: '1',
-          name: 'Demo User',
-          email,
-          avatar: '/placeholder.svg',
-        };
-        authDispatch({ type: 'LOGIN_SUCCESS', payload: user });
-        localStorage.setItem('printstrokes_user', JSON.stringify(user));
-        toast.success('Welcome back!');
-      } else {
-        throw new Error('Invalid credentials');
+    let cancelled = false;
+    const initialize = async () => {
+      const hasSession = Boolean(customerTokenStorage.getAccessToken() || customerTokenStorage.getRefreshToken());
+      if (!hasSession) {
+        authDispatch({ type: "LOGOUT" });
+        return;
       }
-    } catch (error) {
-      authDispatch({ type: 'LOGIN_ERROR' });
-      toast.error('Invalid email or password');
-      throw error;
-    }
-  };
+      try {
+        const user = await storefrontApi.auth.me();
+        if (cancelled) return;
+        authDispatch({ type: "AUTHENTICATED", payload: user });
+        await syncGuestCart();
+      } catch {
+        customerTokenStorage.clear();
+        if (!cancelled) authDispatch({ type: "LOGOUT" });
+      }
+    };
+    void initialize();
+    return () => { cancelled = true; };
+  }, [syncGuestCart]);
 
-  const register = async (name: string, email: string, password: string) => {
-    authDispatch({ type: 'LOGIN_START' });
-    
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const user: User = {
-        id: Date.now().toString(),
-        name,
-        email,
-        avatar: '/placeholder.svg',
-      };
-      
-      authDispatch({ type: 'LOGIN_SUCCESS', payload: user });
-      localStorage.setItem('printstrokes_user', JSON.stringify(user));
-      toast.success('Account created successfully!');
-    } catch (error) {
-      authDispatch({ type: 'LOGIN_ERROR' });
-      toast.error('Registration failed');
-      throw error;
-    }
-  };
-
-  const logout = () => {
-    authDispatch({ type: 'LOGOUT' });
-    localStorage.removeItem('printstrokes_user');
-    toast.success('Logged out successfully');
-  };
-
-  // Personalization actions
-  const setCurrentDesign = (design: Design | null) => {
-    personalizationDispatch({ type: 'SET_CURRENT_DESIGN', payload: design });
-  };
-
-  const setCanvasReady = (ready: boolean) => {
-    personalizationDispatch({ type: 'SET_CANVAS_READY', payload: ready });
-  };
-
-  const setSelectedLayer = (layerId: string | null) => {
-    personalizationDispatch({ type: 'SET_SELECTED_LAYER', payload: layerId });
-  };
-
-  const setCanvasZoom = (zoom: number) => {
-    personalizationDispatch({ type: 'SET_CANVAS_ZOOM', payload: zoom });
-  };
-
-  const setCanvasOffset = (x: number, y: number) => {
-    personalizationDispatch({ type: 'SET_CANVAS_OFFSET', payload: { x, y } });
-  };
-
-  const saveDesign = async (design: Design): Promise<string> => {
-    // Mock save to localStorage
-    const designId = `design_${Date.now()}`;
-    const designWithId = { ...design, id: designId };
-    
-    const savedDesigns = JSON.parse(localStorage.getItem('printstrokes_designs') || '[]');
-    savedDesigns.push(designWithId);
-    localStorage.setItem('printstrokes_designs', JSON.stringify(savedDesigns));
-    
-    return designId;
-  };
-
-  const loadDesign = async (designId: string): Promise<Design | null> => {
-    const savedDesigns = JSON.parse(localStorage.getItem('printstrokes_designs') || '[]');
-    return savedDesigns.find((d: Design) => d.id === designId) || null;
-  };
-
-  // Check for saved user on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem('printstrokes_user');
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
-      authDispatch({ type: 'LOGIN_SUCCESS', payload: user });
+    if (!authState.isAuthenticated) {
+      try { localStorage.setItem(GUEST_CART_KEY, JSON.stringify(cartState)); } catch { /* ignore quota errors */ }
     }
+  }, [authState.isAuthenticated, cartState]);
+
+  const addToCart = useCallback(async (item: Omit<CartItem, "id">) => {
+    if (authState.isAuthenticated) {
+      const cart = await storefrontApi.cart.add(item);
+      cartDispatch({ type: "SET_CART", payload: cart });
+    } else {
+      cartDispatch({ type: "ADD_GUEST_ITEM", payload: item });
+    }
+  }, [authState.isAuthenticated]);
+
+  const removeFromCart = useCallback(async (itemId: string) => {
+    if (authState.isAuthenticated) {
+      const cart = await storefrontApi.cart.remove(itemId);
+      cartDispatch({ type: "SET_CART", payload: cart });
+    } else {
+      cartDispatch({ type: "REMOVE_GUEST_ITEM", payload: itemId });
+    }
+  }, [authState.isAuthenticated]);
+
+  const updateQuantity = useCallback(async (itemId: string, quantity: number) => {
+    if (quantity <= 0) return removeFromCart(itemId);
+    if (authState.isAuthenticated) {
+      const cart = await storefrontApi.cart.update(itemId, { quantity });
+      cartDispatch({ type: "SET_CART", payload: cart });
+    } else {
+      cartDispatch({ type: "UPDATE_GUEST_QUANTITY", payload: { itemId, quantity } });
+    }
+  }, [authState.isAuthenticated, removeFromCart]);
+
+  const clearCart = useCallback(async () => {
+    if (authState.isAuthenticated) await storefrontApi.cart.clear();
+    localStorage.removeItem(GUEST_CART_KEY);
+    cartDispatch({ type: "CLEAR" });
+  }, [authState.isAuthenticated]);
+
+  const updateCartItemDesign = useCallback(async (itemId: string, design: Design) => {
+    if (authState.isAuthenticated) {
+      const cart = await storefrontApi.cart.update(itemId, {
+        customizationJson: JSON.stringify(design),
+        previewImageUrl: design.layers.find((layer) => layer.type === "image")?.url,
+      });
+      cartDispatch({ type: "SET_CART", payload: cart });
+    } else {
+      cartDispatch({ type: "UPDATE_GUEST_DESIGN", payload: { itemId, design } });
+    }
+  }, [authState.isAuthenticated]);
+
+  const login = useCallback(async (email: string, password: string) => {
+    authDispatch({ type: "LOADING", payload: true });
+    try {
+      const user = await storefrontApi.auth.login(email, password);
+      authDispatch({ type: "AUTHENTICATED", payload: user });
+      await syncGuestCart();
+      toast.success("Welcome back!");
+    } catch (error) {
+      authDispatch({ type: "LOGOUT" });
+      throw new Error(getApiErrorMessage(error, "Invalid email or password"));
+    }
+  }, [syncGuestCart]);
+
+  const register = useCallback(async (name: string, email: string, password: string, phone?: string) => {
+    authDispatch({ type: "LOADING", payload: true });
+    try {
+      const user = await storefrontApi.auth.signup(name, email, password, phone);
+      authDispatch({ type: "AUTHENTICATED", payload: user });
+      await syncGuestCart();
+      toast.success("Account created successfully!");
+    } catch (error) {
+      authDispatch({ type: "LOGOUT" });
+      throw new Error(getApiErrorMessage(error, "Registration failed"));
+    }
+  }, [syncGuestCart]);
+
+  const logout = useCallback(async () => {
+    await storefrontApi.auth.logout();
+    authDispatch({ type: "LOGOUT" });
+    cartDispatch({ type: "SET_CART", payload: readGuestCart() });
+    toast.success("Logged out successfully");
   }, []);
+
+  const saveDesign = useCallback(async (design: Design) => {
+    const id = design.id || crypto.randomUUID();
+    const designs = safeReadDesigns().filter((item) => item.id !== id);
+    designs.push({ ...design, id });
+    try { localStorage.setItem("printstrokes_designs", JSON.stringify(designs.slice(-20))); } catch { /* optional */ }
+    return id;
+  }, []);
+
+  const loadDesign = useCallback(async (designId: string) => safeReadDesigns().find((item) => item.id === designId) ?? null, []);
+
+  const cartValue = useMemo<CartContextType>(() => ({
+    state: cartState,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    updateCartItemDesign,
+    refreshCart,
+  }), [cartState, addToCart, removeFromCart, updateQuantity, clearCart, updateCartItemDesign, refreshCart]);
+
+  const authValue = useMemo<AuthContextType>(() => ({ state: authState, login, register, logout }), [authState, login, register, logout]);
+
+  const personalizationValue = useMemo<PersonalizationContextType>(() => ({
+    state: personalizationState,
+    setCurrentDesign: (design) => personalizationDispatch({ type: "SET_CURRENT_DESIGN", payload: design }),
+    setCanvasReady: (ready) => personalizationDispatch({ type: "SET_CANVAS_READY", payload: ready }),
+    setSelectedLayer: (layerId) => personalizationDispatch({ type: "SET_SELECTED_LAYER", payload: layerId }),
+    setCanvasZoom: (zoom) => personalizationDispatch({ type: "SET_CANVAS_ZOOM", payload: zoom }),
+    setCanvasOffset: (x, y) => personalizationDispatch({ type: "SET_CANVAS_OFFSET", payload: { x, y } }),
+    saveDesign,
+    loadDesign,
+  }), [personalizationState, saveDesign, loadDesign]);
 
   return (
-    <CartContext.Provider value={{ 
-      state: cartState, 
-      addToCart, 
-      removeFromCart, 
-      updateQuantity, 
-      clearCart, 
-      updateCartItemDesign 
-    }}>
-      <AuthContext.Provider value={{ 
-        state: authState, 
-        login, 
-        register, 
-        logout 
-      }}>
-        <PersonalizationContext.Provider value={{
-          state: personalizationState,
-          setCurrentDesign,
-          setCanvasReady,
-          setSelectedLayer,
-          setCanvasZoom,
-          setCanvasOffset,
-          saveDesign,
-          loadDesign,
-        }}>
+    <CartContext.Provider value={cartValue}>
+      <AuthContext.Provider value={authValue}>
+        <PersonalizationContext.Provider value={personalizationValue}>
           {children}
         </PersonalizationContext.Provider>
       </AuthContext.Provider>
@@ -380,21 +326,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-// Hooks
 export const useCart = () => {
   const context = useContext(CartContext);
-  if (!context) throw new Error('useCart must be used within AppProvider');
+  if (!context) throw new Error("useCart must be used within AppProvider");
   return context;
 };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AppProvider');
+  if (!context) throw new Error("useAuth must be used within AppProvider");
   return context;
 };
 
 export const usePersonalization = () => {
   const context = useContext(PersonalizationContext);
-  if (!context) throw new Error('usePersonalization must be used within AppProvider');
+  if (!context) throw new Error("usePersonalization must be used within AppProvider");
   return context;
 };
