@@ -156,11 +156,16 @@ const Login = () => {
                     {isLoading ? "Signing in..." : "Sign In"}
                   </Button>
 
-                  <div className="text-center">
-                    <span className="text-sm text-muted-foreground">
-                      Password reset is not enabled yet.
-                    </span>
-                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full text-xs font-semibold"
+                    onClick={() => {
+                      setLoginForm({ email: "demo@printstrokes.com", password: "demopassword123" });
+                    }}
+                  >
+                    ⚡ Auto-fill Demo Account
+                  </Button>
                 </form>
               </TabsContent>
 

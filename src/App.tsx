@@ -14,6 +14,7 @@ const CategoryCatalog = lazy(() => import("./pages/CategoryCatalog"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const Cart = lazy(() => import("./pages/Cart"));
 const Login = lazy(() => import("./pages/Login"));
+const Blogs = lazy(() => import("./pages/Blogs"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -48,9 +49,12 @@ const App = () => (
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/product/:id/editor" element={<EditorPage />} />
               <Route path="/preset/:presetId" element={<PresetCatalog />} />
+              <Route path="/products" element={<CategoryCatalog />} />
               <Route path="/category/:categoryKey" element={<CategoryCatalog />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/cart" element={<Cart />} />
+              <Route path="/blogs" element={<Blogs />} />
+              <Route path="/blogs/:slug" element={<Blogs />} />
               <Route path="/login" element={<Login />} />
               <Route path="/auth" element={<Login />} />
               <Route path="*" element={<NotFound />} />

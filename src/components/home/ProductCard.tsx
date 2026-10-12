@@ -56,30 +56,12 @@ const ProductCard = ({ product }: ProductCardProps) => {
         
         {/* Product Info */}
         <div className="p-4">
-          <div className="flex items-start justify-between mb-2">
+          <div className="flex items-start justify-between mb-3">
             <h3 className="font-heading font-semibold text-lg leading-tight group-hover:text-primary transition-colors">
               <Link to={`/product/${product.id}`} className="line-clamp-2">
                 {product.title}
               </Link>
             </h3>
-          </div>
-          
-          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-            {product.description}
-          </p>
-          
-          {/* Materials */}
-          <div className="flex flex-wrap gap-1 mb-3">
-            {product.materials.slice(0, 2).map((material) => (
-              <Badge key={material} variant="secondary" className="text-xs">
-                {material}
-              </Badge>
-            ))}
-            {product.materials.length > 2 && (
-              <Badge variant="secondary" className="text-xs">
-                +{product.materials.length - 2}
-              </Badge>
-            )}
           </div>
           
           {/* Price and Rating */}

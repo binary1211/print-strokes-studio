@@ -47,10 +47,6 @@ const Cart = () => {
       toast.error("Your cart is empty");
       return;
     }
-    if (!authState.isAuthenticated) {
-      navigate("/login", { state: { from: "/checkout", previous: location.pathname } });
-      return;
-    }
     navigate("/checkout");
   };
 
@@ -187,7 +183,7 @@ const Cart = () => {
                   <span>₹{state.total.toLocaleString("en-IN")}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Final taxes, shipping and payable amount are calculated securely by the backend during checkout.
+                  Free shipping on orders above ₹499. Taxes included.
                 </p>
               </div>
               <Separator className="mb-4" />
@@ -201,9 +197,6 @@ const Cart = () => {
               <Button variant="outline" asChild className="w-full">
                 <Link to="/">Continue Shopping</Link>
               </Button>
-              {!authState.isAuthenticated && (
-                <p className="text-xs text-muted-foreground text-center mt-4">Sign in is required before payment.</p>
-              )}
             </div>
           </div>
         </div>

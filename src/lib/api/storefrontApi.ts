@@ -1,340 +1,282 @@
+// ponytail: In-memory/localStorage mock storefront API for pure frontend operation.
+// Ceiling: Client-side storage only (resets if storage cleared).
+// Upgrade path: Reconnect endpoints to a live backend via apiClient once backend service is deployed.
+
 import type {
   Address,
-  ApiResponse,
-  AuthResponse,
   CartItem,
   CheckoutSession,
-  KonvaTemplate,
   Product,
   ProductTypeSummary,
-  ProductVariant,
   User,
-  VariantOptionGroup,
 } from "@/types";
-import { apiClient } from "@/lib/api/apiClient";
-import { customerTokenStorage, mapUser } from "@/lib/auth/tokenStorage";
+import {
+  MOCK_CATEGORIES,
+  MOCK_DEFAULT_ADDRESSES,
+  MOCK_DEFAULT_USER,
+  MOCK_HOMEPAGE_PRESETS,
+  MOCK_PRODUCTS,
+} from "@/data/mockStorefrontData";
+import { customerTokenStorage } from "@/lib/auth/tokenStorage";
 
-interface BackendMedia {
-  role?: string;
-  url?: string;
-}
+const CART_STORAGE_KEY = "printstrokes_store_cart";
+const ADDRESS_STORAGE_KEY = "printstrokes_addresses";
 
-interface BackendVariant {
-  id?: number;
-  combinationName?: string;
-  extraPrice?: number;
-  optionValues?: Record<string, string>;
-  isActive?: boolean;
-}
+const sleep = (ms = 100) => new Promise((resolve) => setTimeout(resolve, ms));
 
-interface BackendProduct {
-  id: number;
-  name: string;
-  slug?: string;
-  shortDescription?: string;
-  description?: string;
-  basePrice?: number;
-  salePrice?: number | null;
-  categoryId?: number;
-  categoryName?: string;
-  media?: BackendMedia[];
-  mainProductImageUrl?: string;
-  variantsEnabled?: boolean;
-  variants?: BackendVariant[];
-  variantOptionGroups?: VariantOptionGroup[];
-  photoUploadRequired?: boolean;
-  textRequired?: boolean;
-  konvaEditorEnabled?: boolean;
-  konvaTemplates?: KonvaTemplate[];
-  backgroundRemovalRequired?: boolean;
-  productType?: ProductTypeSummary | null;
-}
-
-interface BackendCartItem {
-  id: number;
-  productId: number;
-  productName: string;
-  productSlug?: string;
-  productImageUrl?: string;
-  variantId?: number | null;
-  variantName?: string | null;
-  sku?: string;
-  quantity: number;
-  unitPrice: number;
-  lineTotal: number;
-  customizationJson?: string | null;
-  previewImageUrl?: string | null;
-}
-
-interface BackendCart {
-  cartId: number;
-  totalQuantity: number;
-  subtotal: number;
-  currency: string;
-  items: BackendCartItem[];
-}
-
-const safeNumber = (value: unknown, fallback = 0) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+const readSavedAddresses = (): Address[] => {
+  try {
+    const raw = localStorage.getItem(ADDRESS_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(ADDRESS_STORAGE_KEY, JSON.stringify(MOCK_DEFAULT_ADDRESSES));
+      return MOCK_DEFAULT_ADDRESSES;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : MOCK_DEFAULT_ADDRESSES;
+  } catch {
+    return MOCK_DEFAULT_ADDRESSES;
+  }
 };
 
-const parseDimension = (name = "") => {
-  const match = name.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
-  if (!match) return { width: 300, height: 300 };
-  return {
-    width: Math.max(1, safeNumber(match[1], 12)) * 25,
-    height: Math.max(1, safeNumber(match[2], 12)) * 25,
-  };
+const saveAddresses = (addresses: Address[]) => {
+  try {
+    localStorage.setItem(ADDRESS_STORAGE_KEY, JSON.stringify(addresses));
+  } catch {
+    // ignore quota issues
+  }
 };
 
-export const mapBackendProductToStorefront = (product: BackendProduct): Product => {
-  const media = Array.isArray(product.media) ? product.media : [];
-  const images = [
-    media.find((item) => item.role === "MAIN")?.url,
-    media.find((item) => item.role === "MOCKUP")?.url,
-    ...media.filter((item) => item.role === "GALLERY").map((item) => item.url),
-    product.mainProductImageUrl,
-  ].filter((value): value is string => Boolean(value));
-
-  const activeVariants = (product.variants ?? []).filter((variant) => variant.isActive !== false);
-  const variants: ProductVariant[] = product.variantsEnabled && activeVariants.length > 0
-    ? activeVariants.map((variant, index) => {
-        const name = variant.combinationName || "Standard Variant";
-        const dimensions = parseDimension(name);
-        return {
-          id: String(variant.id ?? index),
-          name,
-          dimensions: name,
-          price: safeNumber(product.salePrice ?? product.basePrice) + safeNumber(variant.extraPrice),
-          width: dimensions.width,
-          height: dimensions.height,
-          optionValues: variant.optionValues ?? {},
-        };
-      })
-    : [{
-        id: "standard",
-        name: "Standard",
-        dimensions: "Standard Size",
-        price: safeNumber(product.salePrice ?? product.basePrice),
-        width: 300,
-        height: 300,
-        optionValues: {},
-      }];
-
-  const personalizationOptions: string[] = [];
-  if (product.photoUploadRequired) personalizationOptions.push("photo");
-  if (product.textRequired) personalizationOptions.push("text");
-
-  const isCustomizable = Boolean(
-    product.photoUploadRequired || product.textRequired || product.konvaEditorEnabled,
-  );
-
-  return {
-    id: String(product.id),
-    title: product.name,
-    description: product.shortDescription || product.description || "",
-    category: product.categoryName || "Custom Products",
-    categoryId: product.categoryId,
-    slug: product.slug,
-    materials: ["Premium Acrylic"],
-    variants,
-    basePrice: safeNumber(product.salePrice ?? product.basePrice),
-    personalizationOptions,
-    images: images.length > 0 ? Array.from(new Set(images)) : ["/placeholder.svg"],
-    tags: [product.categoryName || "custom"],
-    stock: "in-stock",
-    featured: false,
-    isCustomizable,
-    customizationType: product.konvaEditorEnabled
-      ? "ADVANCED_DESIGNER"
-      : product.textRequired && !product.photoUploadRequired
-        ? "TEXT_ONLY"
-        : product.photoUploadRequired
-          ? "SIMPLE_IMAGE"
-          : "NONE",
-    konvaTemplates: product.konvaTemplates ?? [],
-    backgroundRemovalRequired: Boolean(
-      product.backgroundRemovalRequired || product.productType?.backgroundRemovalRequired,
-    ),
-    productType: product.productType ?? null,
-    variantOptionGroups: product.variantOptionGroups ?? [],
-    personalization: {
-      supportsImage: Boolean(product.photoUploadRequired),
-      supportsText: Boolean(product.textRequired),
-      maxFileSizeMB: 10,
-      recommendedDPI: 300,
-    },
-  };
+const readSavedCart = (): { items: CartItem[]; total: number; itemCount: number } => {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return { items: [], total: 0, itemCount: 0 };
+    const parsed = JSON.parse(raw);
+    const items: CartItem[] = Array.isArray(parsed.items) ? parsed.items : [];
+    const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+    return { items, total, itemCount };
+  } catch {
+    return { items: [], total: 0, itemCount: 0 };
+  }
 };
 
-const mapCart = (cart: BackendCart): { items: CartItem[]; total: number; itemCount: number } => ({
-  total: safeNumber(cart.subtotal),
-  itemCount: safeNumber(cart.totalQuantity),
-  items: (cart.items ?? []).map((item) => ({
-    id: String(item.id),
-    productId: String(item.productId),
-    productName: item.productName,
-    productSlug: item.productSlug,
-    variantId: item.variantId == null ? "standard" : String(item.variantId),
-    variantName: item.variantName ?? undefined,
-    quantity: item.quantity,
-    price: safeNumber(item.unitPrice),
-    thumbnail: item.previewImageUrl || item.productImageUrl || "/placeholder.svg",
-    customizationJson: item.customizationJson ?? undefined,
-    personalizationSummary: item.customizationJson ? "Customized design" : undefined,
-    sku: item.sku,
-  })),
-});
+const saveCart = (cart: { items: CartItem[]; total: number; itemCount: number }) => {
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  } catch {
+    // ignore quota issues
+  }
+};
 
 export const storefrontApi = {
   auth: {
     login: async (email: string, password: string): Promise<User> => {
-      const response = await apiClient.post<ApiResponse<AuthResponse>>("/api/v1/auth/login", { email, password });
-      const auth = response.data.data;
-      if (!response.data.success || !auth) throw new Error(response.data.message || "Login failed");
-      customerTokenStorage.setAuth(auth);
-      return mapUser(auth.user);
+      await sleep(150);
+      if (!email || !password) throw new Error("Email and password are required");
+
+      const existingUser = customerTokenStorage.getUser();
+      const user: User = existingUser && existingUser.email.toLowerCase() === email.toLowerCase()
+        ? existingUser
+        : {
+            id: `usr_${Date.now()}`,
+            name: email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            email,
+            phone: "9876543210",
+            roles: ["CUSTOMER"],
+          };
+
+      customerTokenStorage.setUser(user);
+      sessionStorage.setItem("customerAccessToken", `mock_token_${Date.now()}`);
+      localStorage.setItem("customerRefreshToken", `mock_refresh_${Date.now()}`);
+      return user;
     },
+
     signup: async (name: string, email: string, password: string, phone?: string): Promise<User> => {
-      const response = await apiClient.post<ApiResponse<AuthResponse>>("/api/v1/auth/signup", {
-        name,
-        email,
-        password,
-        phone: phone || undefined,
-      });
-      const auth = response.data.data;
-      if (!response.data.success || !auth) throw new Error(response.data.message || "Signup failed");
-      customerTokenStorage.setAuth(auth);
-      return mapUser(auth.user);
+      await sleep(150);
+      if (!name || !email || !password) throw new Error("Please fill all required registration fields");
+
+      const user: User = {
+        id: `usr_${Date.now()}`,
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone || "9876543210",
+        roles: ["CUSTOMER"],
+      };
+
+      customerTokenStorage.setUser(user);
+      sessionStorage.setItem("customerAccessToken", `mock_token_${Date.now()}`);
+      localStorage.setItem("customerRefreshToken", `mock_refresh_${Date.now()}`);
+      return user;
     },
+
     me: async (): Promise<User> => {
-      const response = await apiClient.get<ApiResponse<AuthResponse["user"]>>("/api/v1/auth/me");
-      const profile = response.data.data;
-      if (!response.data.success || !profile) throw new Error(response.data.message || "Unable to load profile");
-      const user = mapUser(profile);
+      await sleep(50);
+      const user = customerTokenStorage.getUser() ?? MOCK_DEFAULT_USER;
       customerTokenStorage.setUser(user);
       return user;
     },
+
     logout: async () => {
-      try {
-        if (customerTokenStorage.getAccessToken()) await apiClient.post("/api/v1/auth/logout");
-      } finally {
-        customerTokenStorage.clear();
-      }
+      await sleep(50);
+      customerTokenStorage.clear();
     },
   },
 
   products: {
     list: async (): Promise<Product[]> => {
-      const response = await apiClient.get<ApiResponse<BackendProduct[]>>("/api/v1/product");
-      return (response.data.data ?? []).map(mapBackendProductToStorefront);
+      await sleep(50);
+      return MOCK_PRODUCTS;
     },
+
     get: async (idOrSlug: string): Promise<Product | null> => {
-      const list = await storefrontApi.products.list();
-      const match = list.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
-      if (match) return match;
-      if (!/^\d+$/.test(idOrSlug)) return null;
-      const response = await apiClient.get<ApiResponse<BackendProduct>>(`/api/v1/product/${idOrSlug}`);
-      return response.data.data ? mapBackendProductToStorefront(response.data.data) : null;
+      await sleep(50);
+      const found = MOCK_PRODUCTS.find(
+        (p) => String(p.id) === String(idOrSlug) || p.slug === idOrSlug,
+      );
+      return found ?? null;
     },
+
     categories: async <T = unknown[]>(): Promise<T> => {
-      const response = await apiClient.get<ApiResponse<T>>("/api/v1/category");
-      return (response.data.data ?? []) as T;
+      await sleep(50);
+      return MOCK_CATEGORIES as unknown as T;
     },
+
     homepagePresets: async (): Promise<ProductTypeSummary[]> => {
-      const response = await apiClient.get<ApiResponse<ProductTypeSummary[]>>("/api/v1/product-type-presets/homepage");
-      return response.data.data ?? [];
+      await sleep(50);
+      return MOCK_HOMEPAGE_PRESETS;
     },
+
     presets: async (): Promise<ProductTypeSummary[]> => {
-      const response = await apiClient.get<ApiResponse<ProductTypeSummary[]>>("/api/v1/product-type-presets");
-      return response.data.data ?? [];
+      await sleep(50);
+      return MOCK_HOMEPAGE_PRESETS;
     },
   },
 
   cart: {
     get: async () => {
-      const response = await apiClient.get<ApiResponse<BackendCart>>("/api/v1/cart");
-      if (!response.data.data) return { items: [], total: 0, itemCount: 0 };
-      return mapCart(response.data.data);
+      await sleep(50);
+      return readSavedCart();
     },
+
     add: async (item: Omit<CartItem, "id">) => {
-      const variantId = item.variantId === "standard" ? null : Number(item.variantId);
-      const response = await apiClient.post<ApiResponse<BackendCart>>("/api/v1/cart/items", {
-        productId: Number(item.productId),
-        variantId: Number.isFinite(variantId) ? variantId : null,
-        quantity: item.quantity,
-        customizationJson: item.customizationJson || (item.design ? JSON.stringify(item.design) : undefined),
-        previewImageUrl: item.thumbnail,
-      });
-      if (!response.data.data) throw new Error(response.data.message || "Unable to add item to cart");
-      return mapCart(response.data.data);
+      await sleep(50);
+      const current = readSavedCart();
+      const newItem: CartItem = {
+        ...item,
+        id: crypto.randomUUID(),
+      };
+      const updatedItems = [...current.items, newItem];
+      const nextCart = {
+        items: updatedItems,
+        itemCount: updatedItems.reduce((sum, i) => sum + i.quantity, 0),
+        total: updatedItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
+      };
+      saveCart(nextCart);
+      return nextCart;
     },
+
     update: async (itemId: string, patch: { quantity?: number; customizationJson?: string; previewImageUrl?: string }) => {
-      const response = await apiClient.patch<ApiResponse<BackendCart>>(`/api/v1/cart/items/${itemId}`, patch);
-      if (!response.data.data) throw new Error(response.data.message || "Unable to update cart item");
-      return mapCart(response.data.data);
+      await sleep(50);
+      const current = readSavedCart();
+      const updatedItems = current.items.map((item) => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          quantity: patch.quantity !== undefined ? patch.quantity : item.quantity,
+          customizationJson: patch.customizationJson !== undefined ? patch.customizationJson : item.customizationJson,
+          thumbnail: patch.previewImageUrl !== undefined ? patch.previewImageUrl : item.thumbnail,
+        };
+      });
+      const nextCart = {
+        items: updatedItems,
+        itemCount: updatedItems.reduce((sum, i) => sum + i.quantity, 0),
+        total: updatedItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
+      };
+      saveCart(nextCart);
+      return nextCart;
     },
+
     remove: async (itemId: string) => {
-      const response = await apiClient.delete<ApiResponse<BackendCart>>(`/api/v1/cart/items/${itemId}`);
-      return response.data.data ? mapCart(response.data.data) : storefrontApi.cart.get();
+      await sleep(50);
+      const current = readSavedCart();
+      const updatedItems = current.items.filter((item) => item.id !== itemId);
+      const nextCart = {
+        items: updatedItems,
+        itemCount: updatedItems.reduce((sum, i) => sum + i.quantity, 0),
+        total: updatedItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
+      };
+      saveCart(nextCart);
+      return nextCart;
     },
+
     clear: async () => {
-      await apiClient.delete("/api/v1/cart");
-      return { items: [], total: 0, itemCount: 0 };
+      await sleep(50);
+      const empty = { items: [], total: 0, itemCount: 0 };
+      saveCart(empty);
+      return empty;
     },
   },
 
   addresses: {
     list: async (): Promise<Address[]> => {
-      const response = await apiClient.get<ApiResponse<Address[]>>("/api/v1/addresses");
-      return response.data.data ?? [];
+      await sleep(50);
+      return readSavedAddresses();
     },
+
     create: async (address: Omit<Address, "id">): Promise<Address> => {
-      const response = await apiClient.post<ApiResponse<Address>>("/api/v1/addresses", address);
-      if (!response.data.data) throw new Error(response.data.message || "Unable to save address");
-      return response.data.data;
+      await sleep(50);
+      const existing = readSavedAddresses();
+      const newAddress: Address = {
+        ...address,
+        id: existing.length > 0 ? Math.max(...existing.map((a) => a.id)) + 1 : 1,
+      };
+      const updated = [...existing, newAddress];
+      saveAddresses(updated);
+      return newAddress;
     },
   },
 
   checkout: {
     create: async (shippingAddressId: number): Promise<CheckoutSession> => {
-      const response = await apiClient.post<ApiResponse<CheckoutSession>>("/api/v1/orders/checkout", {
-        shippingAddressId,
-      });
-      if (!response.data.data) throw new Error(response.data.message || "Unable to start checkout");
-      return response.data.data;
+      await sleep(100);
+      const cart = readSavedCart();
+      const addresses = readSavedAddresses();
+      const address = addresses.find((a) => a.id === shippingAddressId) || addresses[0];
+      const user = customerTokenStorage.getUser() || MOCK_DEFAULT_USER;
+      const orderNum = `PS-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      return {
+        orderId: Math.floor(1000 + Math.random() * 9000),
+        orderNumber: orderNum,
+        razorpayOrderId: `order_mock_${Date.now()}`,
+        razorpayKeyId: "rzp_test_mock_printstrokes",
+        amountInPaise: Math.round(cart.total * 100),
+        amount: cart.total,
+        currency: "INR",
+        customerName: address?.name || user.name,
+        customerEmail: user.email,
+        customerPhone: address?.phone || user.phone,
+      };
     },
-    verify: async (payload: {
+
+    verify: async (_payload: {
       orderId: number;
       razorpayOrderId: string;
       razorpayPaymentId: string;
       razorpaySignature: string;
     }) => {
-      const response = await apiClient.post<ApiResponse<unknown>>("/api/v1/payments/razorpay/verify", payload);
-      if (!response.data.success) throw new Error(response.data.message || "Payment verification failed");
-      return response.data;
+      await sleep(100);
+      return { success: true, message: "Payment verified successfully" };
     },
   },
 
   customization: {
-    removeBackground: async (productId: string, file: File): Promise<string> => {
+    removeBackground: async (_productId: string, file: File): Promise<string> => {
+      await sleep(100);
       if (!/^image\/(png|jpeg|jpg|webp)$/i.test(file.type)) {
         throw new Error("Please upload a PNG, JPG, JPEG, or WebP image");
       }
-      if (file.size > 10 * 1024 * 1024) throw new Error("Image must be 10 MB or smaller");
-
-      const formData = new FormData();
-      formData.append("file", file, file.name);
-      const response = await apiClient.post(
-        `/api/v1/customization/products/${productId}/remove-background`,
-        formData,
-        { responseType: "blob", headers: { Accept: "image/png,image/jpeg,application/octet-stream" } },
-      );
-      if (!(response.data instanceof Blob) || response.data.size === 0) {
-        throw new Error("Background removal returned an empty image");
-      }
-      return URL.createObjectURL(response.data);
+      return URL.createObjectURL(file);
     },
   },
 };

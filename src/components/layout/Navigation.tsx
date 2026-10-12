@@ -12,9 +12,19 @@ const Navigation = () => {
     <nav className="nav-sticky">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          <Link to="/" className="flex items-center group" aria-label="Print Strokes home">
-            <img src="/print%20strokes%20logo.png" alt="Print Strokes" className="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
-          </Link>
+          <div className="flex items-center gap-8">
+            <Link to="/" className="flex items-center group" aria-label="Print Strokes home">
+              <img src="/print%20strokes%20logo.png" alt="Print Strokes" className="h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+            </Link>
+
+            <nav className="hidden md:flex items-center space-x-6 text-xs sm:text-sm font-semibold text-slate-600" aria-label="Main navigation">
+              <Link to="/" className="hover:text-primary transition-colors">Home</Link>
+              <Link to="/category/all" className="hover:text-primary transition-colors">Products</Link>
+              <Link to="/category/acrylic-cutouts" className="hover:text-primary transition-colors">Acrylic Cutouts</Link>
+              <Link to="/category/phone-cases" className="hover:text-primary transition-colors">Phone Cases</Link>
+              <Link to="/category/mugs-drinkware" className="hover:text-primary transition-colors">Mugs</Link>
+            </nav>
+          </div>
 
           <div className="flex items-center space-x-3">
             <Link to="/cart" className="relative">
@@ -29,10 +39,15 @@ const Navigation = () => {
             </Link>
 
             {authState.isAuthenticated ? (
-              <Button variant="brand-outline" size="sm" onClick={() => void logout()} disabled={authState.isLoading}>
-                <LogOut className="h-4 w-4" />
-                Logout
-              </Button>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700 hidden sm:inline">
+                  Hi, {authState.user?.name?.split(" ")[0]}
+                </span>
+                <Button variant="brand-outline" size="sm" onClick={() => void logout()} disabled={authState.isLoading}>
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Logout</span>
+                </Button>
+              </div>
             ) : (
               <Button variant="brand-outline" size="sm" asChild>
                 <Link to="/login"><User className="h-4 w-4" />Login</Link>

@@ -10,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Design, Product, ProductVariant } from "@/types";
 import { storefrontApi } from "@/lib/api/storefrontApi";
+import { CLOCK_NUMBER_STYLE_IMAGES, CLOCK_NUMBER_STYLE_OVERLAYS } from "@/data/mockStorefrontData";
 import { useCart } from "@/contexts/AppContext";
 import { getApiErrorMessage } from "@/lib/api/apiClient";
 import { toast } from "sonner";
-import type { PreviewState, Slot, Template } from "../../../../packages/editor/src/types";
+import type { PreviewState, Slot, Template } from "@/components/editor/types";
 
 interface ProductDetailLocationState {
   uploadedImageUrl?: string;
@@ -225,8 +226,15 @@ const ProductDetail = () => {
     return { width: "12", height: "12" };
   };
 
+  const isClockProduct = product.productType?.slug === "acrylic-clocks" || product.categoryId === 4;
+  const selectedNumberStyle = selectedVariant?.optionValues?.["Number Style"] || "Classic Arabic";
+  const selectedThickness = selectedVariant?.optionValues?.["Thickness"] || "3mm";
+  const selectedSize = selectedVariant?.optionValues?.["Size"] || "12x12 inch";
+  const clockStylePreviewImg = CLOCK_NUMBER_STYLE_IMAGES[selectedNumberStyle];
+  const clockStyleOverlayImg = CLOCK_NUMBER_STYLE_OVERLAYS[selectedNumberStyle];
+
   const { width: parsedWidth, height: parsedHeight } = parseDimensions(
-    selectedVariant?.dimensions || selectedVariant?.name || "12x12"
+    selectedVariant?.optionValues?.["Size"] || selectedVariant?.dimensions || selectedVariant?.name || "12x12"
   );
 
   const widthVal = parseFloat(parsedWidth) || 12;
@@ -243,6 +251,7 @@ const ProductDetail = () => {
       state: {
         uploadedImageUrl,
         previewState,
+        customization,
       },
     });
   };
@@ -299,7 +308,7 @@ const ProductDetail = () => {
 
                     {/* The Cutout Image itself */}
                     <div
-                      className="transition-all duration-300 ease-out flex items-center justify-center bg-transparent"
+                      className="relative transition-all duration-300 ease-out flex items-center justify-center bg-transparent"
                       style={{
                         width: cutoutWidth,
                         height: cutoutHeight,
@@ -313,12 +322,42 @@ const ProductDetail = () => {
                         alt="Custom Cutout"
                         className="max-w-full max-h-full object-contain filter drop-shadow-[0_15px_15px_rgba(0,0,0,0.35)] animate-in fade-in zoom-in-95 duration-500"
                       />
+                      {isClockProduct && clockStyleOverlayImg && (
+                        <img
+                          src={clockStyleOverlayImg}
+                          alt={selectedNumberStyle}
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none drop-shadow"
+                        />
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              <ProductImageGallery images={galleryImages} title={product.title} />
+              <div className="space-y-4">
+                <ProductImageGallery images={galleryImages} title={product.title} />
+                {isClockProduct && clockStylePreviewImg && (
+                  <div className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50/70">
+                    <img
+                      src={clockStylePreviewImg}
+                      alt={selectedNumberStyle}
+                      className="w-16 h-16 rounded-xl bg-white p-1 border border-slate-200 shrink-0 shadow-sm"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-primary">
+                        Active Clock Configuration
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 truncate">
+                        {selectedNumberStyle} Dial
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Size: <strong className="text-slate-700">{selectedSize}</strong> • Thickness:{" "}
+                        <strong className="text-slate-700">{selectedThickness}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

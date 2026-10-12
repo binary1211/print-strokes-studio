@@ -157,29 +157,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const refreshCart = useCallback(async () => {
-    if (!customerTokenStorage.getRefreshToken() && !customerTokenStorage.getAccessToken()) return;
     cartDispatch({ type: "SET_LOADING", payload: true });
     try {
       const cart = await storefrontApi.cart.get();
       cartDispatch({ type: "SET_CART", payload: cart });
-    } catch (error) {
+    } catch {
       cartDispatch({ type: "SET_LOADING", payload: false });
-      throw error;
     }
   }, []);
-
-  const syncGuestCart = useCallback(async () => {
-    const guestItems = readGuestCart().items;
-    for (const item of guestItems) await storefrontApi.cart.add(item);
-    localStorage.removeItem(GUEST_CART_KEY);
-    await refreshCart();
-  }, [refreshCart]);
 
   useEffect(() => {
     let cancelled = false;
     const initialize = async () => {
-      const hasSession = Boolean(customerTokenStorage.getAccessToken() || customerTokenStorage.getRefreshToken());
-      if (!hasSession) {
+      const existingUser = customerTokenStorage.getUser();
+      if (!existingUser) {
         authDispatch({ type: "LOGOUT" });
         return;
       }
@@ -187,7 +178,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const user = await storefrontApi.auth.me();
         if (cancelled) return;
         authDispatch({ type: "AUTHENTICATED", payload: user });
-        await syncGuestCart();
       } catch {
         customerTokenStorage.clear();
         if (!cancelled) authDispatch({ type: "LOGOUT" });
@@ -195,90 +185,64 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
     void initialize();
     return () => { cancelled = true; };
-  }, [syncGuestCart]);
-
-  useEffect(() => {
-    if (!authState.isAuthenticated) {
-      try { localStorage.setItem(GUEST_CART_KEY, JSON.stringify(cartState)); } catch { /* ignore quota errors */ }
-    }
-  }, [authState.isAuthenticated, cartState]);
+  }, []);
 
   const addToCart = useCallback(async (item: Omit<CartItem, "id">) => {
-    if (authState.isAuthenticated) {
-      const cart = await storefrontApi.cart.add(item);
-      cartDispatch({ type: "SET_CART", payload: cart });
-    } else {
-      cartDispatch({ type: "ADD_GUEST_ITEM", payload: item });
-    }
-  }, [authState.isAuthenticated]);
+    const cart = await storefrontApi.cart.add(item);
+    cartDispatch({ type: "SET_CART", payload: cart });
+  }, []);
 
   const removeFromCart = useCallback(async (itemId: string) => {
-    if (authState.isAuthenticated) {
-      const cart = await storefrontApi.cart.remove(itemId);
-      cartDispatch({ type: "SET_CART", payload: cart });
-    } else {
-      cartDispatch({ type: "REMOVE_GUEST_ITEM", payload: itemId });
-    }
-  }, [authState.isAuthenticated]);
+    const cart = await storefrontApi.cart.remove(itemId);
+    cartDispatch({ type: "SET_CART", payload: cart });
+  }, []);
 
   const updateQuantity = useCallback(async (itemId: string, quantity: number) => {
     if (quantity <= 0) return removeFromCart(itemId);
-    if (authState.isAuthenticated) {
-      const cart = await storefrontApi.cart.update(itemId, { quantity });
-      cartDispatch({ type: "SET_CART", payload: cart });
-    } else {
-      cartDispatch({ type: "UPDATE_GUEST_QUANTITY", payload: { itemId, quantity } });
-    }
-  }, [authState.isAuthenticated, removeFromCart]);
+    const cart = await storefrontApi.cart.update(itemId, { quantity });
+    cartDispatch({ type: "SET_CART", payload: cart });
+  }, [removeFromCart]);
 
   const clearCart = useCallback(async () => {
-    if (authState.isAuthenticated) await storefrontApi.cart.clear();
-    localStorage.removeItem(GUEST_CART_KEY);
-    cartDispatch({ type: "CLEAR" });
-  }, [authState.isAuthenticated]);
+    const cart = await storefrontApi.cart.clear();
+    cartDispatch({ type: "SET_CART", payload: cart });
+  }, []);
 
   const updateCartItemDesign = useCallback(async (itemId: string, design: Design) => {
-    if (authState.isAuthenticated) {
-      const cart = await storefrontApi.cart.update(itemId, {
-        customizationJson: JSON.stringify(design),
-        previewImageUrl: design.layers.find((layer) => layer.type === "image")?.url,
-      });
-      cartDispatch({ type: "SET_CART", payload: cart });
-    } else {
-      cartDispatch({ type: "UPDATE_GUEST_DESIGN", payload: { itemId, design } });
-    }
-  }, [authState.isAuthenticated]);
+    const cart = await storefrontApi.cart.update(itemId, {
+      customizationJson: JSON.stringify(design),
+      previewImageUrl: design.layers.find((layer) => layer.type === "image")?.url,
+    });
+    cartDispatch({ type: "SET_CART", payload: cart });
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     authDispatch({ type: "LOADING", payload: true });
     try {
       const user = await storefrontApi.auth.login(email, password);
       authDispatch({ type: "AUTHENTICATED", payload: user });
-      await syncGuestCart();
       toast.success("Welcome back!");
     } catch (error) {
       authDispatch({ type: "LOGOUT" });
       throw new Error(getApiErrorMessage(error, "Invalid email or password"));
     }
-  }, [syncGuestCart]);
+  }, []);
 
   const register = useCallback(async (name: string, email: string, password: string, phone?: string) => {
     authDispatch({ type: "LOADING", payload: true });
     try {
       const user = await storefrontApi.auth.signup(name, email, password, phone);
       authDispatch({ type: "AUTHENTICATED", payload: user });
-      await syncGuestCart();
       toast.success("Account created successfully!");
     } catch (error) {
       authDispatch({ type: "LOGOUT" });
       throw new Error(getApiErrorMessage(error, "Registration failed"));
     }
-  }, [syncGuestCart]);
+  }, []);
 
   const logout = useCallback(async () => {
     await storefrontApi.auth.logout();
     authDispatch({ type: "LOGOUT" });
-    cartDispatch({ type: "SET_CART", payload: readGuestCart() });
     toast.success("Logged out successfully");
   }, []);
 

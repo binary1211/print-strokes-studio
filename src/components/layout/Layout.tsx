@@ -16,10 +16,16 @@ const Layout = ({ children }: LayoutProps) => (
           <img src="/print%20strokes%20logo.png" alt="Print Strokes" className="h-8 w-auto object-contain mx-auto md:mx-0" />
           <p className="text-sm text-muted-foreground">Personalized products printed on premium materials.</p>
         </div>
-        <nav className="flex flex-wrap justify-center gap-5 text-sm text-muted-foreground" aria-label="Footer navigation">
-          <Link to="/" className="hover:text-primary">Home</Link>
-          <Link to="/category/all" className="hover:text-primary">Products</Link>
-          <Link to="/cart" className="hover:text-primary">Cart</Link>
+        <nav className="flex flex-wrap items-center justify-center gap-5 text-sm text-muted-foreground" aria-label="Footer navigation">
+          <Link to="/" className="hover:text-primary transition-colors">Home</Link>
+          <Link to="/category/all" className="hover:text-primary transition-colors">Products</Link>
+          <Link
+            to="/blogs"
+            className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-primary/10 text-primary font-semibold hover:bg-primary hover:text-white transition-all"
+          >
+            Blogs
+          </Link>
+          <Link to="/cart" className="hover:text-primary transition-colors">Cart</Link>
         </nav>
         <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} Print Strokes</p>
       </div>

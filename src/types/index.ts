@@ -52,6 +52,7 @@ export interface Product {
 export interface VariantOptionGroup {
   optionName: string;
   optionValues: string[];
+  optionImages?: Record<string, string>;
 }
 
 export interface KonvaTemplate {
