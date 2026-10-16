@@ -174,7 +174,7 @@ const ProductDetail = () => {
   };
 
   const handleBuyNow = async () => {
-    if (await handleAddToCart()) navigate("/cart");
+    if (await handleAddToCart()) navigate("/checkout");
   };
 
   if (loading) {

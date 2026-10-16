@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
 import type { AuthState, CartItem, CartState, Design, PersonalizationState, User } from "@/types";
 import { toast } from "sonner";
 import { storefrontApi } from "@/lib/api/storefrontApi";
@@ -9,6 +9,11 @@ const GUEST_CART_KEY = "printstrokes_guest_cart";
 
 interface CartContextType {
   state: CartState;
+  isCartOpen: boolean;
+  setIsCartOpen: (open: boolean) => void;
+  openCart: () => void;
+  closeCart: () => void;
+  toggleCart: () => void;
   addToCart: (item: Omit<CartItem, "id">) => Promise<void>;
   removeFromCart: (itemId: string) => Promise<void>;
   updateQuantity: (itemId: string, quantity: number) => Promise<void>;
@@ -142,6 +147,10 @@ const PersonalizationContext = createContext<PersonalizationContextType | null>(
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [cartState, cartDispatch] = useReducer(cartReducer, undefined, () => ({ ...readGuestCart(), isLoading: false }));
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const openCart = useCallback(() => setIsCartOpen(true), []);
+  const closeCart = useCallback(() => setIsCartOpen(false), []);
+  const toggleCart = useCallback(() => setIsCartOpen((prev) => !prev), []);
   const [authState, authDispatch] = useReducer(authReducer, {
     user: customerTokenStorage.getUser(),
     isAuthenticated: Boolean(customerTokenStorage.getUser()),
@@ -190,6 +199,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const addToCart = useCallback(async (item: Omit<CartItem, "id">) => {
     const cart = await storefrontApi.cart.add(item);
     cartDispatch({ type: "SET_CART", payload: cart });
+    setIsCartOpen(true);
   }, []);
 
   const removeFromCart = useCallback(async (itemId: string) => {
@@ -258,13 +268,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const cartValue = useMemo<CartContextType>(() => ({
     state: cartState,
+    isCartOpen,
+    setIsCartOpen,
+    openCart,
+    closeCart,
+    toggleCart,
     addToCart,
     removeFromCart,
     updateQuantity,
     clearCart,
     updateCartItemDesign,
     refreshCart,
-  }), [cartState, addToCart, removeFromCart, updateQuantity, clearCart, updateCartItemDesign, refreshCart]);
+  }), [cartState, isCartOpen, openCart, closeCart, toggleCart, addToCart, removeFromCart, updateQuantity, clearCart, updateCartItemDesign, refreshCart]);
 
   const authValue = useMemo<AuthContextType>(() => ({ state: authState, login, register, logout }), [authState, login, register, logout]);
 
